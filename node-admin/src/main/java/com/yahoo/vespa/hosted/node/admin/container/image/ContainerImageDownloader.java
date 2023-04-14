@@ -53,8 +53,9 @@ public class ContainerImageDownloader {
                 Instant start = timer.currentTime();
                 containerEngine.pullImage(context, image, credentialsProvider.get());
                 LOG.log(Level.INFO, "Downloaded container image " + image + " in " + Duration.between(start, timer.currentTime()));
+                context.log(LOG, "Container image " + image + " download completed");
             } catch (RuntimeException e) {
-                LOG.log(Level.SEVERE, "Failed to download container image " + image, e);
+                context.log(LOG, Level.SEVERE, "Failed to download container image " + image, e);
             } finally {
                 pendingDownloads.remove(image);
             }
