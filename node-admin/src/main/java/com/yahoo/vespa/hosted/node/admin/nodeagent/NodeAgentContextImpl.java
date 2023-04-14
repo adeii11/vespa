@@ -61,7 +61,7 @@ public class NodeAgentContextImpl implements NodeAgentContext {
         this.zone = Objects.requireNonNull(zone);
         this.userScope = Objects.requireNonNull(userScope);
         this.pathScope = Objects.requireNonNull(pathScope);
-        this.logPrefix = containerName.asString() + ": ";
+        this.logPrefix = containerName.value() + ": ";
         this.cpuSpeedup = cpuSpeedup;
         this.disabledNodeAgentTasks = NodeAgentTask.fromString(
                 PermanentFlags.DISABLED_HOST_ADMIN_TASKS.bindTo(flagSource)
