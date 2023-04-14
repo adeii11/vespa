@@ -10,7 +10,6 @@ import com.yahoo.config.provision.DockerImage;
 import com.yahoo.config.provision.HostName;
 import com.yahoo.config.provision.NodeResources;
 import com.yahoo.config.provision.NodeType;
-import com.yahoo.config.provision.WireguardKey;
 import com.yahoo.config.provision.WireguardKeyWithTimestamp;
 import com.yahoo.config.provision.host.FlavorOverrides;
 import com.yahoo.vespa.hosted.node.admin.configserver.ConfigServerApi;
@@ -66,7 +65,7 @@ public class RealNodeRepository implements NodeRepository {
         String path = "/nodes/v2/node/?recursive=true&parentHost=" + baseHostName;
         final GetNodesResponse nodesForHost = configServerApi.get(path, GetNodesResponse.class);
 
-        return nodesForHost.nodes.stream()
+        return nodesForHost.nodes().stream()
                 .map(RealNodeRepository::createNodeSpec)
                 .toList();
     }
@@ -96,29 +95,29 @@ public class RealNodeRepository implements NodeRepository {
         GetAclResponse response = configServerApi.get(path, GetAclResponse.class);
 
         // Group ports by container hostname that trusts them
-        Map<String, Set<Integer>> trustedPorts = response.trustedPorts.stream()
+        Map<String, Set<Integer>> trustedPorts = response.trustedPorts().stream()
                 .collect(Collectors.groupingBy(
-                        GetAclResponse.Port::getTrustedBy,
-                        Collectors.mapping(port -> port.port, Collectors.toSet())));
+                        GetAclResponse.Port::trustedBy,
+                        Collectors.mapping(GetAclResponse.Port::port, Collectors.toSet())));
 
         // Group UDP ports by container hostname that trusts them
-        Map<String, Set<Integer>> trustedUdpPorts = response.trustedUdpPorts.stream()
+        Map<String, Set<Integer>> trustedUdpPorts = response.trustedUdpPorts().stream()
                 .collect(Collectors.groupingBy(
-                        GetAclResponse.Port::getTrustedBy,
-                        Collectors.mapping(port -> port.port, Collectors.toSet())));
+                        GetAclResponse.Port::trustedBy,
+                        Collectors.mapping(GetAclResponse.Port::port, Collectors.toSet())));
 
         // Group node ip-addresses by container hostname that trusts them
-        Map<String, Set<Acl.Node>> trustedNodes = response.trustedNodes.stream()
+        Map<String, Set<Acl.Node>> trustedNodes = response.trustedNodes().stream()
                 .collect(Collectors.groupingBy(
-                        GetAclResponse.Node::getTrustedBy,
+                        GetAclResponse.Node::trustedBy,
                         Collectors.mapping(
-                                node -> new Acl.Node(node.hostname, node.ipAddress, Set.copyOf(node.ports)),
+                                node -> new Acl.Node(node.hostname(), node.ipAddress(), Set.copyOf(node.ports())),
                                 Collectors.toSet())));
 
         // Group trusted networks by container hostname that trusts them
-        Map<String, Set<String>> trustedNetworks = response.trustedNetworks.stream()
-                 .collect(Collectors.groupingBy(GetAclResponse.Network::getTrustedBy,
-                                                Collectors.mapping(node -> node.network, Collectors.toSet())));
+        Map<String, Set<String>> trustedNetworks = response.trustedNetworks().stream()
+                 .collect(Collectors.groupingBy(GetAclResponse.Network::trustedBy,
+                                                Collectors.mapping(GetAclResponse.Network::network, Collectors.toSet())));
 
 
         // For each hostname create an ACL
@@ -138,12 +137,10 @@ public class RealNodeRepository implements NodeRepository {
         String path = "/nodes/v2/node/?recursive=true&enclave=true";
         final GetNodesResponse response = configServerApi.get(path, GetNodesResponse.class);
 
-        return response.nodes.stream()
+        return response.nodes().stream()
                 .mapMulti((NodeRepositoryNode node, Consumer<WireguardPeer> consumer) -> {
-                    var keyWithTimestamp = createWireguardKeyWithTimestamp(node.wireguardKeyWithTimestamp,
-                                                                           node.wireguardPubkey,
-                                                                           node.wireguardKeyTimestamp);
-                    if (keyWithTimestamp == null) return;
+                    if (node.wireguardKeyWithTimestamp == null) return;
+                    var keyWithTimestamp = WireguardKeyWithTimestamp.from(node.wireguardKeyWithTimestamp.key(), node.wireguardKeyWithTimestamp.timestamp());
 
                     List<VersionedIpAddress> ipAddresses = getIpAddresses(node);
                     if (ipAddresses.isEmpty()) return;
@@ -165,7 +162,7 @@ public class RealNodeRepository implements NodeRepository {
     @Override
     public List<WireguardPeer> getConfigserverPeers() {
         GetWireguardResponse response = configServerApi.get("/nodes/v2/wireguard", GetWireguardResponse.class);
-        return response.configservers.stream()
+        return response.configservers().stream()
                 .map(RealNodeRepository::createConfigserverPeer)
                 .sorted(Comparator.comparing(WireguardPeer::hostname))
                 .toList();
@@ -185,7 +182,7 @@ public class RealNodeRepository implements NodeRepository {
         StandardConfigServerResponse response = configServerApi.put("/nodes/v2/state/" + state + "/" + hostName,
                                                                     Optional.empty(), /* body */
                                                                     StandardConfigServerResponse.class);
-        logger.info(response.message);
+        logger.info(response.message());
         response.throwOnError("Failed to set node state");
     }
 
@@ -193,7 +190,7 @@ public class RealNodeRepository implements NodeRepository {
     public void reboot(String hostname) {
         String uri = "/nodes/v2/command/reboot?hostname=" + hostname;
         StandardConfigServerResponse response = configServerApi.post(uri, Optional.empty(), StandardConfigServerResponse.class);
-        logger.info(response.message);
+        logger.info(response.message());
         response.throwOnError("Failed to reboot " + hostname);
     }
 
@@ -205,16 +202,15 @@ public class RealNodeRepository implements NodeRepository {
         NodeState nodeState = NodeState.valueOf(node.state);
 
         Optional<NodeMembership> membership = Optional.ofNullable(node.membership)
-                .map(m -> new NodeMembership(m.clusterType, m.clusterId, m.group, m.index, m.retired));
+                .map(m -> new NodeMembership(m.clusterType(), m.clusterId(), m.group(), m.index(), m.retired()));
         NodeReports reports = NodeReports.fromMap(Optional.ofNullable(node.reports).orElseGet(Map::of));
         List<Event> events = node.history.stream()
-                .map(event -> new Event(event.agent, event.event, Optional.ofNullable(event.at).map(Instant::ofEpochMilli).orElse(Instant.EPOCH)))
+                .map(event -> new Event(event.agent(), event.event(), Optional.ofNullable(event.at()).map(Instant::ofEpochMilli).orElse(Instant.EPOCH)))
                 .toList();
 
         List<TrustStoreItem> trustStore = Optional.ofNullable(node.trustStore).orElse(List.of()).stream()
-                .map(item -> new TrustStoreItem(item.fingerprint, Instant.ofEpochMilli(item.expiry)))
+                .map(item -> new TrustStoreItem(item.fingerprint(), Instant.ofEpochMilli(item.expiry())))
                 .toList();
-
 
         return new NodeSpec(
                 node.hostname,
@@ -230,7 +226,7 @@ public class RealNodeRepository implements NodeRepository {
                 Optional.ofNullable(node.wantedOsVersion).map(Version::fromString),
                 Optional.ofNullable(node.currentOsVersion).map(Version::fromString),
                 Optional.ofNullable(node.orchestratorStatus).map(OrchestratorStatus::fromString).orElse(OrchestratorStatus.NO_REMARKS),
-                Optional.ofNullable(node.owner).map(o -> ApplicationId.from(o.tenant, o.application, o.instance)),
+                Optional.ofNullable(node.owner).map(o -> ApplicationId.from(o.tenant(), o.application(), o.instance())),
                 membership,
                 Optional.ofNullable(node.restartGeneration),
                 Optional.ofNullable(node.currentRestartGeneration),
@@ -249,27 +245,26 @@ public class RealNodeRepository implements NodeRepository {
                 Optional.ofNullable(node.archiveUri).map(URI::create),
                 Optional.ofNullable(node.exclusiveTo).map(ApplicationId::fromSerializedForm),
                 trustStore,
-                Optional.ofNullable(createWireguardKeyWithTimestamp(node.wireguardKeyWithTimestamp,
-                                                                    node.wireguardPubkey,
-                                                                    node.wireguardKeyTimestamp)),
+                Optional.ofNullable(node.wireguardKeyWithTimestamp).map(keyAndTimestamp ->
+                        WireguardKeyWithTimestamp.from(keyAndTimestamp.key(), keyAndTimestamp.timestamp())),
                 node.wantToRebuild);
     }
 
     private static NodeResources nodeResources(NodeRepositoryNode.NodeResources nodeResources) {
         return new NodeResources(
-                nodeResources.vcpu,
-                nodeResources.memoryGb,
-                nodeResources.diskGb,
-                nodeResources.bandwidthGbps,
-                diskSpeedFromString(nodeResources.diskSpeed),
-                storageTypeFromString(nodeResources.storageType),
-                architectureFromString(nodeResources.architecture),
+                nodeResources.vcpu(),
+                nodeResources.memoryGb(),
+                nodeResources.diskGb(),
+                nodeResources.bandwidthGbps(),
+                diskSpeedFromString(nodeResources.diskSpeed()),
+                storageTypeFromString(nodeResources.storageType()),
+                architectureFromString(nodeResources.architecture()),
                 gpuResourcesFrom(nodeResources));
     }
 
     private static NodeResources.GpuResources gpuResourcesFrom(NodeRepositoryNode.NodeResources nodeResources) {
-        if (nodeResources.gpuCount == null || nodeResources.gpuMemoryGb == null) return NodeResources.GpuResources.zero();
-        return new NodeResources.GpuResources(nodeResources.gpuCount, nodeResources.gpuMemoryGb);
+        if (nodeResources.gpuCount() == null || nodeResources.gpuMemoryGb() == null) return NodeResources.GpuResources.zero();
+        return new NodeResources.GpuResources(nodeResources.gpuCount(), nodeResources.gpuMemoryGb());
     }
 
     private static NodeResources.DiskSpeed diskSpeedFromString(String diskSpeed) {
@@ -332,24 +327,19 @@ public class RealNodeRepository implements NodeRepository {
         node.hostname = addNode.hostname;
         node.parentHostname = addNode.parentHostname.orElse(null);
         addNode.nodeFlavor.ifPresent(f -> node.flavor = f);
-        addNode.flavorOverrides.flatMap(FlavorOverrides::diskGb).ifPresent(d -> {
-            node.resources = new NodeRepositoryNode.NodeResources();
-            node.resources.diskGb = d;
-        });
-        addNode.nodeResources.ifPresent(resources -> {
-            node.resources = new NodeRepositoryNode.NodeResources();
-            node.resources.vcpu = resources.vcpu();
-            node.resources.memoryGb = resources.memoryGb();
-            node.resources.diskGb = resources.diskGb();
-            node.resources.bandwidthGbps = resources.bandwidthGbps();
-            node.resources.diskSpeed = toString(resources.diskSpeed());
-            node.resources.storageType = toString(resources.storageType());
-            node.resources.architecture = toString(resources.architecture());
-            if (!resources.gpuResources().isZero()) {
-                node.resources.gpuCount = resources.gpuResources().count();
-                node.resources.gpuMemoryGb = resources.gpuResources().memoryGb();
-            }
-        });
+        addNode.flavorOverrides.flatMap(FlavorOverrides::diskGb).ifPresent(d ->
+                node.resources = new NodeRepositoryNode.NodeResources(null, null, d, null, null, null, null, null, null));
+        addNode.nodeResources.ifPresent(resources ->
+                node.resources = new NodeRepositoryNode.NodeResources(
+                        resources.vcpu(),
+                        resources.memoryGb(),
+                        resources.diskGb(),
+                        resources.bandwidthGbps(),
+                        toString(resources.diskSpeed()),
+                        toString(resources.storageType()),
+                        toString(resources.architecture()),
+                        resources.gpuResources().isZero() ? null : resources.gpuResources().count(),
+                        resources.gpuResources().isZero() ? null : resources.gpuResources().memoryGb()));
         node.type = addNode.nodeType.name();
         node.ipAddresses = addNode.ipAddresses;
         node.additionalIpAddresses = addNode.additionalIpAddresses;
@@ -375,32 +365,13 @@ public class RealNodeRepository implements NodeRepository {
         Map<String, JsonNode> reports = nodeAttributes.getReports();
         node.reports = reports == null || reports.isEmpty() ? null : new TreeMap<>(reports);
 
-        // TODO wg: remove when all nodes are using new key+timestamp format
-        node.wireguardPubkey = nodeAttributes.getWireguardPubkey().map(WireguardKey::value).orElse(null);
         return node;
     }
 
     private static WireguardPeer createConfigserverPeer(GetWireguardResponse.Configserver configServer) {
-        return new WireguardPeer(HostName.of(configServer.hostname),
-                                 configServer.ipAddresses.stream().map(VersionedIpAddress::from).toList(),
-                                 createWireguardKeyWithTimestamp(configServer.wireguardKeyWithTimestamp,
-                                                                 configServer.wireguardPubkey,
-                                                                 configServer.wireguardKeyTimestamp));
+        return new WireguardPeer(HostName.of(configServer.hostname()),
+                                 configServer.ipAddresses().stream().map(VersionedIpAddress::from).toList(),
+                                 WireguardKeyWithTimestamp.from(configServer.wireguardKeyWithTimestamp().key(),
+                                                                configServer.wireguardKeyWithTimestamp().timestamp()));
     }
-
-    private static WireguardKeyWithTimestamp createWireguardKeyWithTimestamp(NodeRepositoryNode.WireguardKeyWithTimestamp wirguardJson,
-                                                                             String oldKeyJson, Long oldTimestampJson) {
-        if (wirguardJson != null && wirguardJson.key != null && ! wirguardJson.key.isEmpty()) {
-            return new WireguardKeyWithTimestamp(WireguardKey.from(wirguardJson.key),
-                                                 Instant.ofEpochMilli(wirguardJson.timestamp));
-            // TODO wg: remove when all nodes are using new key+timestamp format
-        } else if (oldKeyJson != null) {
-            var timestamp = oldTimestampJson != null ? oldTimestampJson : 0L;
-            return new WireguardKeyWithTimestamp(WireguardKey.from(oldKeyJson),
-                                                 Instant.ofEpochMilli(timestamp));
-            // TODO END
-        } else return null;
-
-    }
-
 }
