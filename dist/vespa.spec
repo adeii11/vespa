@@ -176,7 +176,11 @@ Requires: libcgroup-tools
 %endif
 Requires: numactl
 BuildRequires: perl
+%if 0%{?el8}
+BuildRequires: valgrind = 1:3.21.0-3.el8
+%else
 BuildRequires: valgrind
+%endif
 BuildRequires: perf
 %if 0%{?amzn2023}
 Requires: vespa-xxhash >= 0.8.1
