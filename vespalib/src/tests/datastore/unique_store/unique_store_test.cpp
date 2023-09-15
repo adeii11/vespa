@@ -11,6 +11,7 @@
 #include <vespa/vespalib/test/insertion_operators.h>
 #include <vespa/vespalib/test/memory_allocator_observer.h>
 #include <vespa/vespalib/util/traits.h>
+#include <type_traits>
 #include <vector>
 
 #include <vespa/log/log.h>
@@ -39,12 +40,13 @@ struct TestBase : public ::testing::Test {
     using EntryRefType = typename UniqueStoreType::RefType;
     using ValueType = typename UniqueStoreType::EntryType;
     using ValueConstRefType = typename UniqueStoreType::EntryConstRefType;
-    using CompareType = typename UniqueStoreType::CompareType;
+    using ComparatorType = typename UniqueStoreTypeAndDictionaryType::ComparatorType;
     using ReferenceStoreValueType = std::conditional_t<std::is_same_v<ValueType, const char *>, std::string, ValueType>;
     using ReferenceStore = std::map<EntryRef, std::pair<ReferenceStoreValueType,uint32_t>>;
 
     AllocStats stats;
     UniqueStoreType store;
+    ComparatorType comparator;
     ReferenceStore refStore;
     generation_t generation;
 
@@ -56,7 +58,8 @@ struct TestBase : public ::testing::Test {
         assertGet(ref, input);
     }
     EntryRef add(ValueConstRefType input) {
-        UniqueStoreAddResult addResult = store.add(input);
+        ComparatorType comp(store.get_data_store(), input);
+        UniqueStoreAddResult addResult = store.add(comp, input);
         EntryRef result = addResult.ref();
         auto insres = refStore.insert(std::make_pair(result, std::make_pair(ReferenceStoreValueType(input), 1u)));
         EXPECT_EQ(insres.second, addResult.inserted());
@@ -81,7 +84,7 @@ struct TestBase : public ::testing::Test {
     }
     void remove(EntryRef ref) {
         ASSERT_EQ(1u, refStore.count(ref));
-        store.remove(ref);
+        store.remove(comparator, ref);
         if (refStore[ref].second > 1) {
             --refStore[ref].second;
         } else {
@@ -155,6 +158,7 @@ template <typename UniqueStoreTypeAndDictionaryType>
 TestBase<UniqueStoreTypeAndDictionaryType>::TestBase()
     : stats(),
       store(std::make_unique<MemoryAllocatorObserver>(stats)),
+      comparator(store.get_data_store()),
       refStore(),
       generation(1)
 {
@@ -164,13 +168,13 @@ TestBase<UniqueStoreTypeAndDictionaryType>::TestBase()
         EXPECT_FALSE(store.get_dictionary().get_has_hash_dictionary());
         break;
     case DictionaryType::BTREE_AND_HASH:
-        store.set_dictionary(std::make_unique<UniqueStoreDictionary<uniquestore::DefaultDictionary, IUniqueStoreDictionary, ShardedHashMap>>(std::make_unique<CompareType>(store.get_data_store())));
+        store.set_dictionary(std::make_unique<UniqueStoreDictionary<uniquestore::DefaultDictionary, IUniqueStoreDictionary, ShardedHashMap>>(std::make_unique<ComparatorType>(store.get_data_store())));
         EXPECT_TRUE(store.get_dictionary().get_has_btree_dictionary());
         EXPECT_TRUE(store.get_dictionary().get_has_hash_dictionary());
         break;
     case DictionaryType::HASH:
     default:
-        store.set_dictionary(std::make_unique<UniqueStoreDictionary<NoBTreeDictionary, IUniqueStoreDictionary, ShardedHashMap>>(std::make_unique<CompareType>(store.get_data_store())));
+        store.set_dictionary(std::make_unique<UniqueStoreDictionary<NoBTreeDictionary, IUniqueStoreDictionary, ShardedHashMap>>(std::make_unique<ComparatorType>(store.get_data_store())));
         EXPECT_FALSE(store.get_dictionary().get_has_btree_dictionary());
         EXPECT_TRUE(store.get_dictionary().get_has_hash_dictionary());
     }
@@ -181,7 +185,7 @@ TestBase<UniqueStoreTypeAndDictionaryType>::~TestBase() = default;
 
 using NumberUniqueStore  = UniqueStore<uint32_t>;
 using StringUniqueStore  = UniqueStore<std::string>;
-using CStringUniqueStore = UniqueStore<const char *, EntryRefT<22>, UniqueStoreStringComparator<EntryRefT<22>>, UniqueStoreStringAllocator<EntryRefT<22>>>;
+using CStringUniqueStore = UniqueStore<const char *, EntryRefT<22>, UniqueStoreStringAllocator<EntryRefT<22>>>;
 using DoubleUniqueStore  = UniqueStore<double>;
 using SmallOffsetNumberUniqueStore = UniqueStore<uint32_t, EntryRefT<10,10>>;
 
@@ -194,93 +198,111 @@ std::vector<const char *> TestBaseValues<CStringUniqueStore>::values{ "aa", "bbb
 template <>
 std::vector<double> TestBaseValues<DoubleUniqueStore>::values{ 10.0, 20.0, 30.0, 10.0 };
 
+template <typename UniqueStoreType>
+using DefaultComparatorType = std::conditional_t<std::is_same_v<typename UniqueStoreType::EntryType,const char*>,UniqueStoreStringComparator<typename UniqueStoreType::RefType>,UniqueStoreComparator<typename UniqueStoreType::EntryType, typename UniqueStoreType::RefType>>;
+
 struct BTreeNumberUniqueStore
 {
     using UniqueStoreType = NumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE;
 };
 
 struct BTreeStringUniqueStore
 {
     using UniqueStoreType = StringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE;
 };
 
 struct BTreeCStringUniqueStore
 {
     using UniqueStoreType = CStringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE;
 };
 
 struct BTreeDoubleUniqueStore
 {
     using UniqueStoreType = DoubleUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE;
 };
 
 struct BTreeSmallOffsetNumberUniqueStore
 {
     using UniqueStoreType = SmallOffsetNumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE;
 };
 
 struct HybridNumberUniqueStore
 {
     using UniqueStoreType = NumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE_AND_HASH;
 };
 
 struct HybridStringUniqueStore
 {
     using UniqueStoreType = StringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE_AND_HASH;
 };
 
 struct HybridCStringUniqueStore
 {
     using UniqueStoreType = CStringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE_AND_HASH;
 };
 
 struct HybridDoubleUniqueStore
 {
     using UniqueStoreType = DoubleUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE_AND_HASH;
 };
 
 struct HybridSmallOffsetNumberUniqueStore
 {
     using UniqueStoreType = SmallOffsetNumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::BTREE_AND_HASH;
 };
 
 struct HashNumberUniqueStore
 {
     using UniqueStoreType = NumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::HASH;
 };
 
 struct HashStringUniqueStore
 {
     using UniqueStoreType = StringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::HASH;
 };
 
 struct HashCStringUniqueStore
 {
     using UniqueStoreType = CStringUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::HASH;
 };
 
 struct HashDoubleUniqueStore
 {
     using UniqueStoreType = DoubleUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::HASH;
 };
 
 struct HashSmallOffsetNumberUniqueStore
 {
     using UniqueStoreType = SmallOffsetNumberUniqueStore;
+    using ComparatorType = DefaultComparatorType<UniqueStoreType>;
     static constexpr DictionaryType dictionary_type = DictionaryType::HASH;
 };
 
@@ -311,7 +333,7 @@ TYPED_TEST(TestBase, entries_are_put_on_hold_when_value_is_removed)
     EntryRef ref = this->add(this->values()[0]);
     size_t reserved = this->get_reserved(ref);
     this->assertBufferState(ref, TestBufferStats().used(1 + reserved).hold(0).dead(reserved));
-    this->store.remove(ref);
+    this->store.remove(this->comparator, ref);
     this->assertBufferState(ref, TestBufferStats().used(1 + reserved).hold(1).dead(reserved));
 }
 
@@ -323,9 +345,9 @@ TYPED_TEST(TestBase, entries_are_reference_counted)
     // Note: The first buffer have the first entry reserved -> we expect 2 entries used here.
     size_t reserved = this->get_reserved(ref);
     this->assertBufferState(ref, TestBufferStats().used(1 + reserved).hold(0).dead(reserved));
-    this->store.remove(ref);
+    this->store.remove(this->comparator, ref);
     this->assertBufferState(ref, TestBufferStats().used(1 + reserved).hold(0).dead(reserved));
-    this->store.remove(ref);
+    this->store.remove(this->comparator, ref);
     this->assertBufferState(ref, TestBufferStats().used(1 + reserved).hold(1).dead(reserved));
 }
 
@@ -473,5 +495,5 @@ TEST_F(DoubleTest, control_memory_usage) {
     EXPECT_EQ(155692u, store.getMemoryUsage().allocatedBytes());
     EXPECT_EQ(49980u, store.getMemoryUsage().usedBytes());
 }
-                
+
 GTEST_MAIN_RUN_ALL_TESTS()

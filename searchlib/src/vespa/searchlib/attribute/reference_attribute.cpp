@@ -47,6 +47,7 @@ ReferenceAttribute::ReferenceAttribute(const vespalib::stringref baseFileName)
 ReferenceAttribute::ReferenceAttribute(const vespalib::stringref baseFileName, const Config & cfg)
     : NotImplementedAttribute(baseFileName, cfg),
       _store(get_memory_allocator()),
+      _comparator(_store.get_data_store()),
       _indices(cfg.getGrowStrategy(), getGenerationHolder(), get_initial_alloc()),
       _compaction_spec(),
       _gidToLidMapperFactory(),
@@ -154,7 +155,7 @@ ReferenceAttribute::clearDoc(DocId doc)
     if (oldRef.valid()) {
         removeReverseMapping(oldRef, doc);
         _indices[doc].store_release(EntryRef());
-        _store.remove(oldRef);
+        _store.remove(_comparator, oldRef);
         return 1u;
     } else {
         return 0u;
@@ -270,14 +271,15 @@ ReferenceAttribute::update(DocId doc, const GlobalId &gid)
     assert(doc < _indices.size());
     EntryRef oldRef = _indices[doc].load_relaxed();
     Reference refToAdd(gid);
-    EntryRef newRef = _store.add(refToAdd).ref();
+    ComparatorType comp(_store.get_data_store(), refToAdd);
+    EntryRef newRef = _store.add(comp, refToAdd).ref();
     std::atomic_thread_fence(std::memory_order_release);
     _indices[doc].store_release(newRef);
     if (oldRef.valid()) {
         if (oldRef != newRef) {
             removeReverseMapping(oldRef, doc);
         }
-        _store.remove(oldRef);
+        _store.remove(_comparator, oldRef);
     }
     if (oldRef != newRef) {
         addReverseMapping(newRef, doc);
@@ -349,10 +351,11 @@ void
 ReferenceAttribute::notifyReferencedPutNoCommit(const GlobalId &gid, DocId targetLid)
 {
     assert(targetLid != 0);
-    EntryRef ref = _store.find(gid);
+    Reference refToAdd(gid);
+    ComparatorType comp(_store.get_data_store(), refToAdd);
+    EntryRef ref = _store.find(comp);
     if (!ref.valid() || _store.get(ref).lid() == 0) {
-        Reference refToAdd(gid);
-        ref = _store.add(refToAdd).ref();
+        ref = _store.add(comp, refToAdd).ref();
     }
     const auto &entry = _store.get(ref);
     _referenceMappings.notifyReferencedPut(entry, targetLid);
@@ -368,13 +371,15 @@ ReferenceAttribute::notifyReferencedPut(const GlobalId &gid, DocId targetLid)
 bool
 ReferenceAttribute::notifyReferencedRemoveNoCommit(const GlobalId &gid)
 {
-    EntryRef ref = _store.find(gid);
+    Reference ref_to_find(gid);
+    ComparatorType comp(_store.get_data_store(), ref_to_find);
+    EntryRef ref = _store.find(comp);
     if (ref.valid()) {
         const auto &entry = _store.get(ref);
         uint32_t oldTargetLid = entry.lid();
         _referenceMappings.notifyReferencedRemove(entry);
         if (oldTargetLid != 0) {
-            _store.remove(ref);
+            _store.remove(_comparator, ref);
         }
         return true;
     }
@@ -433,7 +438,7 @@ ReferenceAttribute::clearDocs(DocId lidLow, DocId lidLimit, bool)
         if (oldRef.valid()) {
             removeReverseMapping(oldRef, lid);
             _indices[lid].store_release(EntryRef());
-            _store.remove(oldRef);
+            _store.remove(_comparator, oldRef);
         }
     }
 }

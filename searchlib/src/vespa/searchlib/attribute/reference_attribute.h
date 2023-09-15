@@ -31,6 +31,7 @@ public:
     using EntryRef = vespalib::datastore::EntryRef;
     using GlobalId = document::GlobalId;
     using ReferenceStore = vespalib::datastore::UniqueStore<Reference>;
+    using ComparatorType = vespalib::datastore::UniqueStoreComparator<Reference, typename ReferenceStore::RefType>;
     using ReferenceStoreIndices = vespalib::RcuVectorBase<AtomicEntryRef>;
     // Class used to map from target lid to source lids
     using ReverseMapping = vespalib::btree::BTreeStore<uint32_t, vespalib::btree::BTreeNoLeafData,
@@ -43,6 +44,7 @@ public:
     using ReverseMappingRefs = ReferenceMappings::ReverseMappingRefs;
 private:
     ReferenceStore _store;
+    ComparatorType _comparator;
     ReferenceStoreIndices _indices;
     ReferenceAttributeCompactionSpec _compaction_spec;
     std::shared_ptr<IGidToLidMapperFactory> _gidToLidMapperFactory;

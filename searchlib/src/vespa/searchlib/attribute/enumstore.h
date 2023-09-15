@@ -43,7 +43,7 @@ public:
     using AllocatorType = std::conditional_t<std::is_same_v<EntryT, const char *>,
                                              vespalib::datastore::UniqueStoreStringAllocator<InternalIndex>,
                                              vespalib::datastore::UniqueStoreAllocator<EntryT, InternalIndex>>;
-    using UniqueStoreType = vespalib::datastore::UniqueStore<EntryT, InternalIndex, ComparatorType, AllocatorType>;
+    using UniqueStoreType = vespalib::datastore::UniqueStore<EntryT, InternalIndex, AllocatorType>;
 
     using EntryType = EntryT;
     using EnumStoreType = EnumStoreT<EntryT>;

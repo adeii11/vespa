@@ -216,7 +216,7 @@ template <typename EntryT>
 IEnumStore::Index
 EnumStoreT<EntryT>::insert(EntryType value)
 {
-    return _store.add(value).ref();
+    return _store.add(make_comparator(value), value).ref();
 }
 
 

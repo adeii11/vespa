@@ -27,59 +27,55 @@ using DefaultUniqueStoreDictionary = UniqueStoreDictionary<DefaultDictionary>;
 
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-UniqueStore<EntryT, RefT, Compare, Allocator>::UniqueStore(std::shared_ptr<alloc::MemoryAllocator> memory_allocator)
-    : UniqueStore<EntryT, RefT, Compare, Allocator>(std::make_unique<uniquestore::DefaultUniqueStoreDictionary>(std::unique_ptr<EntryComparator>()), std::move(memory_allocator))
+template <typename EntryT, typename RefT, typename Allocator>
+UniqueStore<EntryT, RefT, Allocator>::UniqueStore(std::shared_ptr<alloc::MemoryAllocator> memory_allocator)
+    : UniqueStore<EntryT, RefT, Allocator>(std::make_unique<uniquestore::DefaultUniqueStoreDictionary>(std::unique_ptr<EntryComparator>()), std::move(memory_allocator))
 {
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-UniqueStore<EntryT, RefT, Compare, Allocator>::UniqueStore(std::unique_ptr<IUniqueStoreDictionary> dict, std::shared_ptr<alloc::MemoryAllocator> memory_allocator)
+template <typename EntryT, typename RefT, typename Allocator>
+UniqueStore<EntryT, RefT, Allocator>::UniqueStore(std::unique_ptr<IUniqueStoreDictionary> dict, std::shared_ptr<alloc::MemoryAllocator> memory_allocator)
     : _allocator(std::move(memory_allocator)),
       _store(_allocator.get_data_store()),
       _dict(std::move(dict))
 {
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-UniqueStore<EntryT, RefT, Compare, Allocator>::~UniqueStore() = default;
+template <typename EntryT, typename RefT, typename Allocator>
+UniqueStore<EntryT, RefT, Allocator>::~UniqueStore() = default;
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 void
-UniqueStore<EntryT, RefT, Compare, Allocator>::set_dictionary(std::unique_ptr<IUniqueStoreDictionary> dict)
+UniqueStore<EntryT, RefT, Allocator>::set_dictionary(std::unique_ptr<IUniqueStoreDictionary> dict)
 {
     _dict = std::move(dict);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 UniqueStoreAddResult
-UniqueStore<EntryT, RefT, Compare, Allocator>::add(EntryConstRefType value)
+UniqueStore<EntryT, RefT, Allocator>::add(const EntryComparator& comp, EntryConstRefType value)
 {
-    Compare comp(_store, value);
     UniqueStoreAddResult result = _dict->add(comp, [this, &value]() -> EntryRef { return _allocator.allocate(value); });
     _allocator.get_wrapped(result.ref()).inc_ref_count();
     return result;
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 EntryRef
-UniqueStore<EntryT, RefT, Compare, Allocator>::find(EntryConstRefType value)
+UniqueStore<EntryT, RefT, Allocator>::find(const EntryComparator& comp)
 {
-    Compare comp(_store, value);
     return _dict->find(comp);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 void
-UniqueStore<EntryT, RefT, Compare, Allocator>::remove(EntryRef ref)
+UniqueStore<EntryT, RefT, Allocator>::remove(const EntryComparator& comp, EntryRef ref)
 {
     auto &wrapped_entry = _allocator.get_wrapped(ref);
     auto ref_count = wrapped_entry.get_ref_count();
     assert(ref_count > 0u);
     wrapped_entry.dec_ref_count();
     if (ref_count == 1u) {
-        EntryType unused{};
-        Compare comp(_store, unused);
         _dict->remove(comp, ref);
         _allocator.hold(ref);
     }
@@ -152,9 +148,9 @@ public:
 
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-std::unique_ptr<typename UniqueStore<EntryT, RefT, Compare, Allocator>::Remapper>
-UniqueStore<EntryT, RefT, Compare, Allocator>::compact_worst(CompactionSpec compaction_spec, const CompactionStrategy& compaction_strategy)
+template <typename EntryT, typename RefT, typename Allocator>
+std::unique_ptr<typename UniqueStore<EntryT, RefT, Allocator>::Remapper>
+UniqueStore<EntryT, RefT, Allocator>::compact_worst(CompactionSpec compaction_spec, const CompactionStrategy& compaction_strategy)
 {
     auto compacting_buffers = _store.start_compact_worst_buffers(compaction_spec, compaction_strategy);
     if (compacting_buffers->empty()) {
@@ -164,71 +160,71 @@ UniqueStore<EntryT, RefT, Compare, Allocator>::compact_worst(CompactionSpec comp
     }
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 vespalib::MemoryUsage
-UniqueStore<EntryT, RefT, Compare, Allocator>::getMemoryUsage() const
+UniqueStore<EntryT, RefT, Allocator>::getMemoryUsage() const
 {
     vespalib::MemoryUsage usage = get_values_memory_usage();
     usage.merge(get_dictionary_memory_usage());
     return usage;
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 vespalib::AddressSpace
-UniqueStore<EntryT, RefT, Compare, Allocator>::get_values_address_space_usage() const
+UniqueStore<EntryT, RefT, Allocator>::get_values_address_space_usage() const
 {
     return _allocator.get_data_store().getAddressSpaceUsage();
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 const BufferState &
-UniqueStore<EntryT, RefT, Compare, Allocator>::bufferState(EntryRef ref) const
+UniqueStore<EntryT, RefT, Allocator>::bufferState(EntryRef ref) const
 {
     RefT internalRef(ref);
     return _store.getBufferState(internalRef.bufferId());
 }
 
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 void
-UniqueStore<EntryT, RefT, Compare, Allocator>::assign_generation(generation_t current_gen)
+UniqueStore<EntryT, RefT, Allocator>::assign_generation(generation_t current_gen)
 {
     _dict->assign_generation(current_gen);
     _store.assign_generation(current_gen);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 void
-UniqueStore<EntryT, RefT, Compare, Allocator>::reclaim_memory(generation_t oldest_used_gen)
+UniqueStore<EntryT, RefT, Allocator>::reclaim_memory(generation_t oldest_used_gen)
 {
     _dict->reclaim_memory(oldest_used_gen);
     _store.reclaim_memory(oldest_used_gen);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 void
-UniqueStore<EntryT, RefT, Compare, Allocator>::freeze()
+UniqueStore<EntryT, RefT, Allocator>::freeze()
 {
     _dict->freeze();
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-typename UniqueStore<EntryT, RefT, Compare, Allocator>::Builder
-UniqueStore<EntryT, RefT, Compare, Allocator>::getBuilder(uint32_t uniqueValuesHint)
+template <typename EntryT, typename RefT, typename Allocator>
+typename UniqueStore<EntryT, RefT, Allocator>::Builder
+UniqueStore<EntryT, RefT, Allocator>::getBuilder(uint32_t uniqueValuesHint)
 {
     return Builder(_allocator, *_dict, uniqueValuesHint);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
-typename UniqueStore<EntryT, RefT, Compare, Allocator>::Enumerator
-UniqueStore<EntryT, RefT, Compare, Allocator>::getEnumerator(bool sort_unique_values)
+template <typename EntryT, typename RefT, typename Allocator>
+typename UniqueStore<EntryT, RefT, Allocator>::Enumerator
+UniqueStore<EntryT, RefT, Allocator>::getEnumerator(bool sort_unique_values)
 {
     return Enumerator(*_dict, _store, sort_unique_values);
 }
 
-template <typename EntryT, typename RefT, typename Compare, typename Allocator>
+template <typename EntryT, typename RefT, typename Allocator>
 uint32_t
-UniqueStore<EntryT, RefT, Compare, Allocator>::getNumUniques() const
+UniqueStore<EntryT, RefT, Allocator>::getNumUniques() const
 {
     return _dict->get_num_uniques();
 }

@@ -30,14 +30,13 @@ class UniqueStoreRemapper;
  * Datastore for unique values of type EntryT that is accessed via a
  * 32-bit EntryRef.
  */
-template <typename EntryT, typename RefT = EntryRefT<22>, typename Compare = UniqueStoreComparator<EntryT, RefT>, typename Allocator = UniqueStoreAllocator<EntryT, RefT> >
+template <typename EntryT, typename RefT = EntryRefT<22>, typename Allocator = UniqueStoreAllocator<EntryT, RefT> >
 class UniqueStore
 {
 public:
     using DataStoreType = DataStoreT<RefT>;
     using EntryType = EntryT;
     using RefType = RefT;
-    using CompareType = Compare;
     using Enumerator = UniqueStoreEnumerator<RefT>;
     using Builder = UniqueStoreBuilder<Allocator>;
     using Remapper = UniqueStoreRemapper<RefT>;
@@ -53,10 +52,10 @@ public:
     UniqueStore(std::unique_ptr<IUniqueStoreDictionary> dict, std::shared_ptr<alloc::MemoryAllocator> memory_allocator);
     ~UniqueStore();
     void set_dictionary(std::unique_ptr<IUniqueStoreDictionary> dict);
-    UniqueStoreAddResult add(EntryConstRefType value);
-    EntryRef find(EntryConstRefType value);
+    UniqueStoreAddResult add(const EntryComparator& comp, EntryConstRefType value);
+    EntryRef find(const EntryComparator& comp);
     EntryConstRefType get(EntryRef ref) const { return _allocator.get(ref); }
-    void remove(EntryRef ref);
+    void remove(const EntryComparator& comp, EntryRef ref);
     std::unique_ptr<Remapper> compact_worst(CompactionSpec compaction_spec, const CompactionStrategy& compaction_strategy);
     vespalib::MemoryUsage getMemoryUsage() const;
     vespalib::MemoryUsage get_values_memory_usage() const { return _store.getMemoryUsage(); }
