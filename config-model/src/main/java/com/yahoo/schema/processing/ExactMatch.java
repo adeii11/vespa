@@ -61,10 +61,6 @@ public class ExactMatch extends Processor {
             if (field.getMatching().getExactMatchTerminator() != null
                 && ! field.getMatching().getExactMatchTerminator().equals("")) {
                 exactTerminator = field.getMatching().getExactMatchTerminator();
-            } else {
-                info(schema, field,
-                     "With 'exact' matching, an exact-terminator is needed," +
-                     " using default value '" + exactTerminator +"' as terminator");
             }
             field.addQueryCommand("exact " + exactTerminator);
 

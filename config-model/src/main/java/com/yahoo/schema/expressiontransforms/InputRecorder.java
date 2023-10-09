@@ -29,6 +29,8 @@ public class InputRecorder extends ExpressionTransformer<InputRecorderContext> {
 
     private final Set<String> neededInputs;
     private final Set<String> handled = new HashSet<>();
+    private final Set<String> availableNormalizers = new HashSet<>();
+    private final Set<String> usedNormalizers = new HashSet<>();
 
     public InputRecorder(Set<String> target) {
         this.neededInputs = target;
@@ -42,6 +44,12 @@ public class InputRecorder extends ExpressionTransformer<InputRecorderContext> {
         handled.add(name);
     }
 
+    public void addNormalizer(String name) {
+        availableNormalizers.add(name);
+    }
+
+    public Set<String> normalizersUsed() { return this.usedNormalizers; }
+    
     @Override
     public ExpressionNode transform(ExpressionNode node, InputRecorderContext context) {
         if (node instanceof ReferenceNode r) {
@@ -75,6 +83,10 @@ public class InputRecorder extends ExpressionTransformer<InputRecorderContext> {
         var args = ref.arguments();
         boolean simpleFunctionOrIdentifier = (args.size() == 0) && (ref.output() == null);
         if (simpleFunctionOrIdentifier && context.localVariables().contains(name)) {
+            return;
+        }
+        if (simpleFunctionOrIdentifier && availableNormalizers.contains(name)) {
+            usedNormalizers.add(name);
             return;
         }
         if (ref.isSimpleRankingExpressionWrapper()) {

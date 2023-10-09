@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -83,6 +84,8 @@ public class RankProfile implements Cloneable {
 
     /** The ranking expression to be used for global-phase */
     private RankingExpressionFunction globalPhaseRanking = null;
+
+    private List<RankFeatureNormalizer> globalPhaseNormalizers = new ArrayList<>();
 
     /** Number of hits to be reranked in second phase, -1 means use default */
     private int rerankCount = -1;
@@ -530,6 +533,19 @@ public class RankProfile implements Cloneable {
         return uniquelyInherited(p -> p.getGlobalPhase(), "global-phase expression").orElse(null);
     }
 
+    public Collection<RankFeatureNormalizer> getGlobalPhaseNormalizers() {
+        Map<String, RankFeatureNormalizer> all = new LinkedHashMap<>();
+        for (var inheritedProfile : inherited()) {
+            for (var n : inheritedProfile.getGlobalPhaseNormalizers()) {
+                all.put(n.name(), n);
+            }
+        }
+        for (var n : globalPhaseNormalizers) {
+            all.put(n.name(), n);
+        }
+        return all.values();
+    }
+
     public void setGlobalPhaseRanking(String expression) {
         try {
             globalPhaseRanking = new RankingExpressionFunction(parseRankingExpression(GLOBAL_PHASE, Collections.emptyList(), expression), false);
@@ -742,6 +758,18 @@ public class RankProfile implements Cloneable {
     public int getGlobalPhaseRerankCount() {
         if (globalPhaseRerankCount >= 0) return globalPhaseRerankCount;
         return uniquelyInherited(p -> p.getGlobalPhaseRerankCount(), c -> c >= 0, "global-phase rerank-count").orElse(-1);
+    }
+
+    public void addGlobalPhaseNormalizer(String name, String input, String normType) {
+        RankingExpressionFunction func = functions.get(input);
+        if (func != null) {
+            input = com.yahoo.searchlib.rankingexpression.Reference.wrapInRankingExpression(input);
+        }
+        func = functions.get(name);
+        if (func != null) {
+            throw new IllegalArgumentException("cannot use name '" + name + "' for both function and normalizer");
+        }
+        globalPhaseNormalizers.add(new RankFeatureNormalizer(name, input, normType));
     }
 
     public void setNumThreadsPerSearch(int numThreads) { this.numThreadsPerSearch = numThreads; }
@@ -1072,8 +1100,16 @@ public class RankProfile implements Cloneable {
                     recorder.alreadyHandled(mf.toString());
                 }
             }
-            recorder.process(globalPhaseRanking.function().getBody(), context);
             List<FeatureList> addIfMissing = new ArrayList<>();
+            for (var normalizer : globalPhaseNormalizers) {
+                recorder.addNormalizer(normalizer.name());
+            }
+            recorder.process(globalPhaseRanking.function().getBody(), context);
+            for (var normalizer : globalPhaseNormalizers) {
+                if (recorder.normalizersUsed().contains(normalizer.name())) {
+                    needInputs.add(normalizer.input());
+                }
+            }
             for (String input : needInputs) {
                 if (input.startsWith("constant(") || input.startsWith("query(")) {
                     continue;
@@ -1413,6 +1449,13 @@ public class RankProfile implements Cloneable {
             return function.toString();
         }
 
+    }
+
+    public static record RankFeatureNormalizer(String name, String input, String type) {
+        @Override
+        public String toString() {
+            return "normalizer{name=" + name + ",input=" + input + "type=" + type + "}";
+        }
     }
 
     public static final class DiversitySettings {

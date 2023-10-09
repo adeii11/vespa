@@ -54,6 +54,7 @@ public class RawRankProfile implements RankProfilesConfig.Producer {
 
     private final String name;
     private final Compressor.Compression compressedProperties;
+    private final Collection<RankProfile.RankFeatureNormalizer> globalPhaseNormalizers;
 
     /**  The compiled profile this is created from. */
     private final Collection<RankProfile.Constant> constants;
@@ -66,13 +67,14 @@ public class RawRankProfile implements RankProfilesConfig.Producer {
         this.name = rankProfile.name();
         /*
          * Forget the RankProfiles as soon as possible. They can become very large and memory hungry
-         * Especially do not refer then through any member variables due to the RawRankProfile living forever.
+         * Especially do not refer them through any member variables due to the RawRankProfile living forever.
          */
         RankProfile compiled = rankProfile.compile(queryProfiles, importedModels);
         constants = compiled.constants().values();
         onnxModels = compiled.onnxModels().values();
-        compressedProperties = compress(new Deriver(compiled, attributeFields, deployProperties, queryProfiles)
-                                                .derive(largeExpressions));
+        var deriver = new Deriver(compiled, attributeFields, deployProperties, queryProfiles);
+        compressedProperties = compress(deriver.derive(largeExpressions));
+        this.globalPhaseNormalizers = compiled.getGlobalPhaseNormalizers();
     }
 
     public Collection<RankProfile.Constant> constants() { return constants; }
@@ -111,6 +113,19 @@ public class RawRankProfile implements RankProfilesConfig.Producer {
         b.fef(fefB);
     }
 
+    private void getGlobalPhase(RankProfilesConfig.Rankprofile.Builder b) {
+        var gPhaseBuilder = new RankProfilesConfig.Rankprofile.Globalphase.Builder();
+        for (var normalizer : globalPhaseNormalizers) {
+            var nBuilder = new RankProfilesConfig.Rankprofile.Globalphase.Normalizer.Builder();
+            nBuilder.name(normalizer.name());
+            nBuilder.input(normalizer.input());
+            var type = RankProfilesConfig.Rankprofile.Globalphase.Normalizer.Normalization.Enum.valueOf(normalizer.type());
+            nBuilder.normalization(type);
+            gPhaseBuilder.normalizer(nBuilder);
+        }
+        b.globalphase(gPhaseBuilder);
+     }
+
     /**
      * Returns the properties of this as an unmodifiable list.
      * Note: This method is expensive.
@@ -121,6 +136,7 @@ public class RawRankProfile implements RankProfilesConfig.Producer {
     public void getConfig(RankProfilesConfig.Builder builder) {
         RankProfilesConfig.Rankprofile.Builder b = new RankProfilesConfig.Rankprofile.Builder().name(getName());
         getRankProperties(b);
+        getGlobalPhase(b);
         builder.rankprofile(b);
     }
 
