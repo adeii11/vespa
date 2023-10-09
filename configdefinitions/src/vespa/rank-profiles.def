@@ -10,3 +10,7 @@ rankprofile[].fef.property[].name string
 ## the value of a generic property available to feature plugins
 rankprofile[].fef.property[].value string
 
+rankprofile[].normalizer[].name string
+rankprofile[].normalizer[].input string
+rankprofile[].normalizer[].algo enum { LINEAR, RRANK } default=LINEAR
+rankprofile[].normalizer[].kparam double default=60.0
