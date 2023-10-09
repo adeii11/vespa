@@ -98,9 +98,9 @@ class GlobalPhaseSetup {
     private static Supplier<Normalizer> makeNormalizerSupplier(RankProfilesConfig.Rankprofile.Normalizer cfg, int rerankCount) {
         switch (cfg.algo()) {
             case LINEAR:
-                return () -> new LinearNormalizer(cfg.name(), cfg.input(), rerankCount);
+                return () -> new LinearNormalizer(rerankCount);
             case RRANK:
-                return () -> new ReciprocalRankNormalizer(cfg.name(), cfg.input(), rerankCount, cfg.kparam());
+                return () -> new ReciprocalRankNormalizer(rerankCount, cfg.kparam());
         }
         throw new IllegalArgumentException("bad algo config: " + cfg.algo());
     }
