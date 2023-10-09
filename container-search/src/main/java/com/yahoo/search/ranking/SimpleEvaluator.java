@@ -16,16 +16,16 @@ class SimpleEvaluator implements Evaluator {
     private final FunctionEvaluator evaluator;
     private final Set<String> neededInputs;
     
-    public SimpleEvaluator(FunctionEvaluator prototype) {
+    SimpleEvaluator(FunctionEvaluator prototype) {
         this.evaluator = prototype;
         this.neededInputs = new HashSet<String>(prototype.function().arguments());
     }
 
     @Override
-    public Collection<String> needInputs() { return List.copyOf(neededInputs); }
+    public List<String> needInputs() { return List.copyOf(neededInputs); }
 
     @Override
-    public SimpleEvaluator bind(String name, Tensor value) {
+    public Evaluator bind(String name, Tensor value) {
         if (value != null) evaluator.bind(name, value);
         neededInputs.remove(name);
         return this;
