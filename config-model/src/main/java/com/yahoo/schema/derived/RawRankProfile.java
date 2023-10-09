@@ -114,16 +114,14 @@ public class RawRankProfile implements RankProfilesConfig.Producer {
     }
 
     private void getGlobalPhase(RankProfilesConfig.Rankprofile.Builder b) {
-        var gPhaseBuilder = new RankProfilesConfig.Rankprofile.Globalphase.Builder();
         for (var normalizer : globalPhaseNormalizers) {
-            var nBuilder = new RankProfilesConfig.Rankprofile.Globalphase.Normalizer.Builder();
+            var nBuilder = new RankProfilesConfig.Rankprofile.Normalizer.Builder();
             nBuilder.name(normalizer.name());
             nBuilder.input(normalizer.input());
-            var type = RankProfilesConfig.Rankprofile.Globalphase.Normalizer.Normalization.Enum.valueOf(normalizer.type());
-            nBuilder.normalization(type);
-            gPhaseBuilder.normalizer(nBuilder);
+            var type = RankProfilesConfig.Rankprofile.Normalizer.Algo.Enum.valueOf(normalizer.type());
+            nBuilder.algo(type);
+            b.normalizer(nBuilder);
         }
-        b.globalphase(gPhaseBuilder);
      }
 
     /**
