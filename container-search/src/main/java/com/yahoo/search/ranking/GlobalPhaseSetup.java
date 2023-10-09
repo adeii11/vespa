@@ -18,7 +18,7 @@ class GlobalPhaseSetup {
     final int rerankCount;
     final Collection<String> matchFeaturesToHide;
     final List<NormalizerSetup> normalizers;
-    
+
     GlobalPhaseSetup(GlobalFunEvalCtx globalPhase,
                      final int rerankCount,
                      Collection<String> matchFeaturesToHide,

@@ -15,7 +15,7 @@ class SimpleEvaluator implements Evaluator {
 
     private final FunctionEvaluator evaluator;
     private final Set<String> neededInputs;
-    
+
     SimpleEvaluator(FunctionEvaluator prototype) {
         this.evaluator = prototype;
         this.neededInputs = new HashSet<String>(prototype.function().arguments());

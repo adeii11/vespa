@@ -15,7 +15,7 @@ class DummyEvaluator implements Evaluator {
 
     private final String input;
     private Tensor result = null;
-    
+
     DummyEvaluator(String input) {
         this.input = input;
     }
