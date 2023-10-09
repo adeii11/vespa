@@ -21,12 +21,8 @@ class DummyEvaluator implements Evaluator {
     }
 
     @Override
-    public List<String> needInputs() {
-        if (result == null) {
-            return List.of(input);
-        } else {
-            return List.of();
-        }
+    public List<String> allInputs() {
+        return List.of(input);
     }
 
     @Override

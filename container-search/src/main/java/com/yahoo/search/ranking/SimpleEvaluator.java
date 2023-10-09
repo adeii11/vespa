@@ -14,20 +14,19 @@ import java.util.Set;
 class SimpleEvaluator implements Evaluator {
 
     private final FunctionEvaluator evaluator;
-    private final Set<String> neededInputs;
 
     SimpleEvaluator(FunctionEvaluator prototype) {
         this.evaluator = prototype;
-        this.neededInputs = new HashSet<String>(prototype.function().arguments());
     }
 
     @Override
-    public List<String> needInputs() { return List.copyOf(neededInputs); }
+    public List<String> allInputs() {
+        return List.copyOf(prototype.function().arguments());
+    }
 
     @Override
     public Evaluator bind(String name, Tensor value) {
         if (value != null) evaluator.bind(name, value);
-        neededInputs.remove(name);
         return this;
     }
 

@@ -6,7 +6,7 @@ import com.yahoo.tensor.Tensor;
 import java.util.List;
 
 interface Evaluator {
-    List<String> needInputs();
+    List<String> allInputs();
 
     Evaluator bind(String name, Tensor value);
 

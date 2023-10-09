@@ -54,7 +54,7 @@ class GlobalPhaseSetup {
         }
         if (functionEvaluatorSource != null) {
             var evaluator = functionEvaluatorSource.get();
-            var needInputs = List.copyOf(evaluator.needInputs());
+            var needInputs = evaluator.allInputs();
             List<String> fromQuery = new ArrayList<>();
             List<String> fromMF = new ArrayList<>();
             List<NormalizerSetup> normalizers = new ArrayList<>();
@@ -83,7 +83,7 @@ class GlobalPhaseSetup {
     {
         List<String> fromQuery = new ArrayList<>();
         List<String> fromMF = new ArrayList<>();
-        for (var input : evalSupplier.get().needInputs()) {
+        for (var input : evalSupplier.get().allInputs()) {
             String queryFeatureName = asQueryFeature(input);
             if (queryFeatureName != null) {
                 fromQuery.add(queryFeatureName);
