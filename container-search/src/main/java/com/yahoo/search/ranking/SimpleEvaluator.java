@@ -21,7 +21,7 @@ class SimpleEvaluator implements Evaluator {
 
     @Override
     public List<String> allInputs() {
-        return List.copyOf(prototype.function().arguments());
+        return List.copyOf(evaluator.function().arguments());
     }
 
     @Override
@@ -41,7 +41,7 @@ class SimpleEvaluator implements Evaluator {
         buf.append("SimpleEvaluator(");
         buf.append(evaluator.function().toString());
         buf.append(")[");
-        for (String arg : neededInputs) {
+        for (String arg : allInputs()) {
             buf.append("{").append(arg).append("}");
         }
         buf.append("]");
