@@ -333,13 +333,6 @@ public class Flags {
             "Takes effect at redeployment",
             INSTANCE_ID);
 
-    public static final UnboundBooleanFlag USE_RECONFIGURABLE_DISPATCHER = defineFeatureFlag(
-            "use-reconfigurable-dispatcher", false,
-            List.of("jonmv"), "2023-07-14", "2023-11-01",
-            "Whether to set up a ReconfigurableDispatcher with config self-sub for backend nodes",
-            "Takes effect at redeployment",
-            INSTANCE_ID);
-
     public static final UnboundBooleanFlag WRITE_CONFIG_SERVER_SESSION_DATA_AS_ONE_BLOB = defineFeatureFlag(
             "write-config-server-session-data-as-blob", false,
             List.of("hmusum"), "2023-07-19", "2023-11-01",
